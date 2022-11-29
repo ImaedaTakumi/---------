@@ -1,25 +1,24 @@
-import threading
+import random
 
-class KeyboardThread(threading.Thread):
+hit_num = 20
+miss_num = 10
+num_num = 255
 
-    def __init__(self, input_cbk = None, name='keyboard-input-thread'):
-        self.input_cbk = input_cbk
-        super(KeyboardThread, self).__init__(name=name)
-        self.start()
+def make_list(hit_num, miss_num, num_num):
+    blank_list = [i for i in range(0, num_num+1)]
+    hit_list = []
+    miss_list = []
 
-    def run(self):
-        while True:
-            self.input_cbk(input()) #waits to get input + Return
+    for i in range(hit_num):
+        index_num = random.randint(0,num_num)
+        hit_list.append(blank_list.pop(index_num))
+        num_num -= 1
 
-showcounter = 0 #something to demonstrate the change
+    for i in range(miss_num):
+        index_num = random.randint(0,num_num)
+        miss_list.append(blank_list.pop(index_num))
+        num_num -= 1
+    
+    return blank_list, hit_list, miss_list
 
-def my_callback(inp):
-    #evaluate the keyboard input
-    print('You Entered:', inp, ' Counter is at:', showcounter)
-
-#start the Keyboard thread
-kthread = KeyboardThread(my_callback)
-
-while True:
-    #the normal program executes without blocking. here just counting up
-    showcounter += 1
+blank_list, hit_list, miss_list = make_list(hit_num, miss_num, num_num)
