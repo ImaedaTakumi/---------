@@ -28,6 +28,7 @@ end_counter = 3
 
 hit_quantity = 50
 miss_quantity = 20
+blank_quantity = 255
 
 class PointSendThreading(threading.Thread):
     def __init__(self, clients):
@@ -40,7 +41,7 @@ class PointSendThreading(threading.Thread):
             sleep_seconds = 5
             time.sleep(sleep_seconds)
             for c in clients:
-                c[0].sendto(get_senddata(c[0], c[1], 1, 1), c[1])
+                c[0].sendto(get_senddata(c[0], c[1], 1), c[1])
     
     def close(self):
         self.flag = False
@@ -69,7 +70,7 @@ class SendDataThreading(threading.Thread):
                 # 入力された数値
                 if exp_Flag:
                     print("ユーザID{}が”{}”と入力しました。".format(userid, num_list))
-                    ad_point = expansion_count(num_list, hit_list, miss_list)
+                    ad_point = expansion_count(num_list)
                     print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
                     if (point[userid] + ad_point > 0):
                         point[userid] += ad_point
@@ -78,7 +79,7 @@ class SendDataThreading(threading.Thread):
                 
                 else:
                     print("ユーザID{}が”{}”と入力しました。".format(userid, num_list[0]))
-                    ad_point = nomal_count(num_list[0], hit_list, miss_list)
+                    ad_point = nomal_count(num_list[0])
                     print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
                     if (point[userid] + ad_point > 0):
                         point[userid] += ad_point
@@ -96,47 +97,54 @@ class SendDataThreading(threading.Thread):
     def close(self):
         self.flag = False
 
-#当たり外れリスト作成(第1引数:当たりの数,第2引数:外れの数)
-def create_random(hit_quantity, miss_quantity):
+def make_list(hit_quantity, miss_quantity, blank_quantity):
+    blank_list = [i for i in range(0, blank_quantity+1)]
     hit_list = []
     miss_list = []
-    while len(hit_list) < hit_quantity:
-        random_number = random.randint(0, 255)
-        if random_number not in hit_list:
-            hit_list.append(random_number)
 
-    while len(miss_list) < miss_quantity:
-        random_number = random.randint(0, 255)
-        if random_number not in (miss_list or hit_list):
-            miss_list.append(random_number)
-    return hit_list, miss_list
+    for i in range(hit_quantity):
+        index_num = random.randint(0,blank_quantity)
+        hit_list.append(blank_list.pop(index_num))
+        blank_quantity -= 1
 
-hit_list, miss_list = create_random(hit_quantity, miss_quantity)
+    for i in range(miss_quantity):
+        index_num = random.randint(0,blank_quantity)
+        miss_list.append(blank_list.pop(index_num))
+        blank_quantity -= 1
+    
+    return blank_list, hit_list, miss_list
+
+blank_list, hit_list, miss_list = make_list(hit_quantity, miss_quantity, blank_quantity)
 
 #点数計算(通常)
-def nomal_count(input_num, hit_list, miss_list):
+def nomal_count(input_num):
+    global blank_list, hit_list, miss_list
     if input_num in hit_list:
         point = 10
+        blank_list.append(hit_list.pop(hit_list.index(input_num)))
     elif input_num in miss_list:
         point = -10
+        blank_list.append(miss_list.pop(miss_list.index(input_num)))
     else:
         point = -1
     
     return point
 
 #点数計算(拡張)
-def expansion_count(input_list, hit_list, miss_list):
+def expansion_count(input_list):
+    global blank_list, hit_list, miss_list
     point = 0
     hit_count = 0
     for num in input_list:
         if num in hit_list:
             point += 10
+            blank_list.append(hit_list.pop(hit_list.index(num)))
             hit_count += 1
         elif num in miss_list:
             point -= 10
+            blank_list.append(miss_list.pop(miss_list.index(num)))
         else:
             point -= 1
-        print(point)
     
     if hit_count > 1:
         point += hit_count*3
@@ -145,7 +153,6 @@ def expansion_count(input_list, hit_list, miss_list):
 
 # サーバをスタートする
 def server_start():
-    global maxclient
     # AF = IPv4 という意味
     # TCP/IP の場合は、SOCK_STREAM を使う
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -163,9 +170,10 @@ def server_start():
             global clients
             clients.append((con, address))
             userid = clients.index((con, address))
+            print(con, address)
             print("[接続] ユーザID{}".format(userid))
 
-            reception = int(input("これ以上ユーザを受け付けますか？(0:いいえ, 1:はい)"))
+            reception = int(input("これ以上ユーザを受け付けますか？(0:いいえ, 1:はい)\n"))
             if (reception == 1):
                 pass
             else:
@@ -175,7 +183,6 @@ def server_start():
         
 # ゲーム開始
 def game_start():
-    client_threads = []
     thread = PointSendThreading(clients)
     thread.start()
 
@@ -183,7 +190,7 @@ def game_start():
         # スレッド処理開始
         client_threads = SendDataThreading(c[0], c[1])
         client_threads.start()
-        c[0].sendto(get_senddata(c[0], c[1], 0, 0), c[1])
+        c[0].sendto(get_senddata(c[0], c[1], 0), c[1])
 
     while True:
         a = input('\nゲームを開始します.(q:終了)')
@@ -194,10 +201,9 @@ def game_start():
             break
 
 # 送信データを返す。判定時のみnumberを使用。それ以外の時は無視する。
-def get_senddata(con, address, w_type, number):
+def get_senddata(con, address, w_type):
     # ユーザIDを取得
     userid = clients.index((con, address))
-    g = number
 
     p = point[userid]
     w = w_type
@@ -285,7 +291,7 @@ def end_game():
     global clients
     print("ゲームを終了します.")
     for c in clients:  # クライアントに終了を伝える
-        c[0].sendto(get_senddata(c[0], c[1], 128, 0), c[1])
+        c[0].sendto(get_senddata(c[0], c[1], 128), c[1])
 
 # クライアントと接続を切る
 def remove_conection(con, address):

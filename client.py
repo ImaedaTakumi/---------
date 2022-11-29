@@ -22,7 +22,6 @@ class PointSendThreading(threading.Thread):
 
     def run(self):
         while self.flag:
-            number = 0
             input_num = list(map(int, input().split()))
             send_num = [0 for i in range(6)]
 
