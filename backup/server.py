@@ -28,6 +28,7 @@ end_counter = 3
 
 hit_quantity = 50
 miss_quantity = 20
+blank_quantity = 255
 
 class PointSendThreading(threading.Thread):
     def __init__(self, clients):
@@ -40,71 +41,118 @@ class PointSendThreading(threading.Thread):
             sleep_seconds = 5
             time.sleep(sleep_seconds)
             for c in clients:
-                    c[0].sendto(get_senddata(c[0], c[1], 1, 1), c[1])
+                c[0].sendto(get_senddata(c[0], c[1], 1), c[1])
     
     def close(self):
         self.flag = False
 
-class EndGameThreading(threading.Thread):
-    def __init__(self):
+class SendDataThreading(threading.Thread):
+    def __init__(self, con, address):
         threading.Thread.__init__(self)
+        self.con = con
+        self.address = address
+        self.flag = True
 
     def run(self):
-        self.a = input()
-        if (self.a == "q"):
-            return False
+        userid = clients.index((self.con, self.address))
+        while self.flag:
+            try:
+                # データを受け取る最大6byte
+                data = self.con.recv(6)
+                recvdata = struct.unpack(">BBBBBB", data)
 
-#当たり外れリスト作成(第1引数:当たりの数,第2引数:外れの数)
-def create_random(hit_quantity, miss_quantity):
+                print("[受信] userid:{}, recvdata:{}".format(userid, recvdata))
+
+                num_list = list(reversed(recvdata))
+                num_list = list(map(int, num_list))
+                num_list = sorted(set(num_list), key=num_list.index)
+
+                # 入力された数値
+                if exp_Flag:
+                    print("ユーザID{}が”{}”と入力しました。".format(userid, num_list))
+                    ad_point = expansion_count(num_list)
+                    print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
+                    if (point[userid] + ad_point > 0):
+                        point[userid] += ad_point
+                    else:
+                        point[userid] = 0
+                
+                else:
+                    print("ユーザID{}が”{}”と入力しました。".format(userid, num_list[0]))
+                    ad_point = nomal_count(num_list[0])
+                    print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
+                    if (point[userid] + ad_point > 0):
+                        point[userid] += ad_point
+                    else:
+                        point[userid] = 0
+                
+                print(point)
+
+            except ConnectionResetError:
+                remove_conection(self.con, self.address)
+                break
+            except struct.error:
+                break
+
+    def close(self):
+        self.flag = False
+
+def make_list(hit_quantity, miss_quantity, blank_quantity):
+    blank_list = [i for i in range(0, blank_quantity+1)]
     hit_list = []
     miss_list = []
-    while len(hit_list) < hit_quantity:
-        random_number = random.randint(0, 256)
-        if random_number not in hit_list:
-            hit_list.append(random_number)
 
-    while len(miss_list) < miss_quantity:
-        random_number = random.randint(0, 256)
-        if random_number not in (miss_list or hit_list):
-            miss_list.append(random_number)
-    return hit_list, miss_list
+    for i in range(hit_quantity):
+        index_num = random.randint(0,blank_quantity)
+        hit_list.append(blank_list.pop(index_num))
+        blank_quantity -= 1
 
-hit_list, miss_list = create_random(hit_quantity, miss_quantity)
-print(hit_list, miss_list)
+    for i in range(miss_quantity):
+        index_num = random.randint(0,blank_quantity)
+        miss_list.append(blank_list.pop(index_num))
+        blank_quantity -= 1
+    
+    return blank_list, hit_list, miss_list
+
+blank_list, hit_list, miss_list = make_list(hit_quantity, miss_quantity, blank_quantity)
 
 #点数計算(通常)
-def nomal_count(input_num, hit_list, miss_list):
+def nomal_count(input_num):
+    global blank_list, hit_list, miss_list
     if input_num in hit_list:
         point = 10
+        blank_list.append(hit_list.pop(hit_list.index(input_num)))
     elif input_num in miss_list:
         point = -10
+        blank_list.append(miss_list.pop(miss_list.index(input_num)))
     else:
         point = -1
     
     return point
 
 #点数計算(拡張)
-def expansion_count(input_list, hit_list, miss_list):
+def expansion_count(input_list):
+    global blank_list, hit_list, miss_list
     point = 0
     hit_count = 0
     for num in input_list:
         if num in hit_list:
             point += 10
+            blank_list.append(hit_list.pop(hit_list.index(num)))
             hit_count += 1
         elif num in miss_list:
             point -= 10
+            blank_list.append(miss_list.pop(miss_list.index(num)))
         else:
             point -= 1
-        print(point)
     
     if hit_count > 1:
-        point += hit_count*1
+        point += hit_count*3
 
     return point
 
 # サーバをスタートする
 def server_start():
-    global maxclient
     # AF = IPv4 という意味
     # TCP/IP の場合は、SOCK_STREAM を使う
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -122,9 +170,10 @@ def server_start():
             global clients
             clients.append((con, address))
             userid = clients.index((con, address))
+            print(con, address)
             print("[接続] ユーザID{}".format(userid))
 
-            reception = int(input("これ以上ユーザを受け付けますか？(0:いいえ, 1:はい)"))
+            reception = int(input("これ以上ユーザを受け付けますか？(0:いいえ, 1:はい)\n"))
             if (reception == 1):
                 pass
             else:
@@ -134,73 +183,27 @@ def server_start():
         
 # ゲーム開始
 def game_start():
-    global thread
-
-    print('\nゲームを開始します.(q:終了)')
     thread = PointSendThreading(clients)
     thread.start()
 
     for c in clients:
         # スレッド処理開始
-        handle_thread = threading.Thread(target=handler,
-                                         args=(c[0], c[1]),
-                                         daemon=True)
-        handle_thread.start()
-        
-        c[0].sendto(get_senddata(c[0], c[1], 0, 0), c[1])
+        client_threads = SendDataThreading(c[0], c[1])
+        client_threads.start()
+        c[0].sendto(get_senddata(c[0], c[1], 0), c[1])
 
-    handle_thread.join()
-
-# クライアントからデータを受信する
-def handler(con, address):
-    # ユーザIDの取得
-    userid = clients.index((con, address))
-    end_timing = EndGameThreading()
-    while end_timing:
-        try:
-            # データを受け取る最大6byte
-            data = con.recv(6)
-            recvdata = struct.unpack("<BBBBBB", data)
-
-            print("[受信] userid:{}, recvdata:{}".format(userid, recvdata))
-
-            num_list = list(reversed(recvdata))
-            num_list = list(map(int, num_list))
-            num_list = sorted(set(num_list), key=num_list.index)
-
-            # 入力された数値
-            if exp_Flag:
-                print("ユーザID{}が”{}”と入力しました。".format(userid, num_list))
-                ad_point = expansion_count(num_list, hit_list, miss_list)
-                print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
-                if (point[userid] + ad_point > 0):
-                    point[userid] += ad_point
-                else:
-                    point[userid] = 0
-            
-            else:
-                print("ユーザID{}が”{}”と入力しました。".format(userid, num_list[0]))
-                ad_point = nomal_count(num_list[0], hit_list, miss_list)
-                print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
-                if (point[userid] + ad_point > 0):
-                    point[userid] += ad_point
-                else:
-                    point[userid] = 0
-
-        except ConnectionResetError:
-            remove_conection(con, address)
+    while True:
+        a = input('\nゲームを開始します.(q:終了)')
+        if (a == "q"):
+            client_threads.close()
+            thread.close()
+            end_game()
             break
-        except struct.error:
-            break
-
-    thread.close()
-    end_game()
 
 # 送信データを返す。判定時のみnumberを使用。それ以外の時は無視する。
-def get_senddata(con, address, w_type, number):
+def get_senddata(con, address, w_type):
     # ユーザIDを取得
     userid = clients.index((con, address))
-    g = number
 
     p = point[userid]
     w = w_type
@@ -280,7 +283,7 @@ def get_senddata(con, address, w_type, number):
             a = point[2]
             b = point[3]
         
-    data = struct.pack("<BBBBBB", w, x, y, z, a, b)
+    data = struct.pack(">BBBBBB", w, x, y, z, a, b)
     return data
 
 # ゲーム終了
@@ -288,7 +291,7 @@ def end_game():
     global clients
     print("ゲームを終了します.")
     for c in clients:  # クライアントに終了を伝える
-        c[0].sendto(get_senddata(c[0], c[1], 128, 0), c[1])
+        c[0].sendto(get_senddata(c[0], c[1], 128), c[1])
 
 # クライアントと接続を切る
 def remove_conection(con, address):

@@ -22,7 +22,6 @@ class PointSendThreading(threading.Thread):
 
     def run(self):
         while self.flag:
-            number = 0
             input_num = list(map(int, input().split()))
             send_num = [0 for i in range(6)]
 
@@ -36,9 +35,12 @@ class PointSendThreading(threading.Thread):
             num4 = send_num[4]
             num5 = send_num[5]
 
+            if self.flag == False:
+                break
+
             # #送信用データをbyte型 に変換
             #w, x, y, z, a, bの順番でパックする
-            data = struct.pack("BBBBBB", num0,num1,num2,num3,num4,num5)
+            data = struct.pack(">BBBBBB", num0,num1,num2,num3,num4,num5)
             # 送信
             s.send(data)
             print('”{}”を送信しました.\n'.format(send_num))
@@ -61,7 +63,7 @@ def game_start(d):
 def handler(s):
     while True:
         data = s.recv(6)
-        recvdata = struct.unpack("BBBBBB", data)
+        recvdata = struct.unpack(">BBBBBB", data)
 
         #print(recvdata)
         if recvdata[0] == 1:#判定を受け取ったら
@@ -123,13 +125,13 @@ if __name__ == "__main__":
 
         #受け取ったバイナリをbyte型に変換
         data = s.recv(6)
-        recvdata = struct.unpack("BBBBBB", data)
+        recvdata = struct.unpack(">BBBBBB", data)
 
         #ゲーム開始を受け取ったら
         if recvdata[0] == 0:
             try:
                 game_start(s)
-            except ValueError:                
+            except ValueError:  
                 s.close()
                 sys.exit()
             except OSError:
