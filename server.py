@@ -41,7 +41,7 @@ class PointSendThreading(threading.Thread):
             sleep_seconds = 5
             time.sleep(sleep_seconds)
             for c in clients:
-                c[0].sendto(get_senddata(c[0], c[1], 1), c[1])
+                c[0].sendto(get_senddata(c[0], c[1], 1, 0), c[1])
     
     def close(self):
         self.flag = False
@@ -69,6 +69,7 @@ class SendDataThreading(threading.Thread):
 
                 # 入力された数値
                 if exp_Flag:
+                    num_list = num_list[:num_quantity]
                     print("ユーザID{}が”{}”と入力しました。".format(userid, num_list))
                     ad_point = expansion_count(num_list)
                     print("ユーザーID{}, {}ポイント獲得".format(userid, ad_point))
@@ -190,7 +191,7 @@ def game_start():
         # スレッド処理開始
         client_threads = SendDataThreading(c[0], c[1])
         client_threads.start()
-        c[0].sendto(get_senddata(c[0], c[1], 0), c[1])
+        c[0].sendto(get_senddata(c[0], c[1], 0, num_quantity), c[1])
 
     while True:
         a = input('\nゲームを開始します.(q:終了)')
@@ -200,8 +201,8 @@ def game_start():
             end_game()
             break
 
-# 送信データを返す。判定時のみnumberを使用。それ以外の時は無視する。
-def get_senddata(con, address, w_type):
+# 送信データを返す。
+def get_senddata(con, address, w_type, num_quantity):
     # ユーザIDを取得
     userid = clients.index((con, address))
 
@@ -214,7 +215,7 @@ def get_senddata(con, address, w_type):
     b = 0
 
     if w_type == 0:  # ゲーム開始
-        x = 0
+        x = num_quantity
         y = 0
         z = 0
         a = 0
@@ -291,7 +292,7 @@ def end_game():
     global clients
     print("ゲームを終了します.")
     for c in clients:  # クライアントに終了を伝える
-        c[0].sendto(get_senddata(c[0], c[1], 128), c[1])
+        c[0].sendto(get_senddata(c[0], c[1], 128, 0), c[1])
 
 # クライアントと接続を切る
 def remove_conection(con, address):
@@ -302,18 +303,22 @@ def remove_conection(con, address):
 
 if __name__ == "__main__":
     print("アタリ：{}, ハズレ：{}".format(hit_list, miss_list))
-    print("拡張機能をOnにしますか?\n0 (On) or 1 (Off)")
+    print("拡張機能をOnにしますか?\n1 (On) or 0 (Off)")
     num = int(input())
-    if num == 0:
+    if num == 1:
         print("On\n")
         exp_Flag = True
-    elif num == 1:
+    elif num == 0:
         print("Off\n")
         exp_Flag = False
     else:
         print("その他が入力されました.\n拡張機能はOffです.\n")
         exp_Flag = False
-
+       
+    if exp_Flag:
+        print("いくつの数字の入力を受け付けますか?\n(2~6の数字を入力してください。)")
+        num_quantity = int(input())
+    
     server_start()
 
     socket.close

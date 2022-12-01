@@ -51,6 +51,7 @@ class PointSendThreading(threading.Thread):
 def game_start(d):
     global thread
     print("ゲームが開始されました.\n")
+    print(f"数字を{num_quantity}つ入力をして下さい。\n")
     #サーバからの受信用スレッドを作成
     handle_thread = threading.Thread(target=handler, args=(s,), daemon=True)
     handle_thread.start()
@@ -80,7 +81,7 @@ def handler(s):
             other4 = recvdata[5]
             print("得点{}".format(other4))
 
-        #ゲーム終了が送られてき時
+        #ゲーム終了が送られてきた時
         if recvdata[0] == 128:
             point = recvdata[1]
             other1 = recvdata[2]
@@ -130,6 +131,10 @@ if __name__ == "__main__":
         #ゲーム開始を受け取ったら
         if recvdata[0] == 0:
             try:
+                if recvdata[1] == 0:
+                    num_quantity = 1
+                else:
+                    num_quantity = recvdata[1]
                 game_start(s)
             except ValueError:  
                 s.close()
