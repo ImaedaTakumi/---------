@@ -318,6 +318,8 @@ if __name__ == "__main__":
     if exp_Flag:
         print("いくつの数字の入力を受け付けますか?\n(2~6の数字を入力してください。)")
         num_quantity = int(input())
+    else:
+        num_quantity = 1
     
     server_start()
 
